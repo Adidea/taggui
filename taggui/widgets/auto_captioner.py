@@ -162,10 +162,14 @@ class CaptionSettingsForm(QVBoxLayout):
         self.bad_words_line_edit.setClearButtonEnabled(True)
         self.forced_words_line_edit = SettingsLineEdit(key='forced_words')
         self.forced_words_line_edit.setClearButtonEnabled(True)
+        self.tag_source_line_edit = SettingsLineEdit(key='tag_source')
+        self.tag_source_line_edit.setClearButtonEnabled(True)
         bad_forced_words_form.addRow('Discourage from caption',
                                      self.bad_words_line_edit)
         bad_forced_words_form.addRow('Include in caption',
                                      self.forced_words_line_edit)
+        bad_forced_words_form.addRow('Tag source directory',
+                                     self.tag_source_line_edit)
         self.min_new_token_count_spin_box = FocusedScrollSettingsSpinBox(
             key='min_new_tokens', default=1, minimum=1, maximum=999)
         self.max_new_token_count_spin_box = FocusedScrollSettingsSpinBox(
@@ -322,6 +326,7 @@ class CaptionSettingsForm(QVBoxLayout):
                 self.remove_tag_separators_check_box.isChecked(),
             'bad_words': self.bad_words_line_edit.text(),
             'forced_words': self.forced_words_line_edit.text(),
+            'tag_source': self.tag_source_line_edit.text(),
             'generation_parameters': {
                 'min_new_tokens': self.min_new_token_count_spin_box.value(),
                 'max_new_tokens': self.max_new_token_count_spin_box.value(),
