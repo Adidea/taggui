@@ -65,6 +65,9 @@ class CaptionSettingsForm(QVBoxLayout):
         # `setEditable()` must be called before `addItems()` to preserve any
         # custom model that was set.
         self.model_combo_box.setEditable(True)
+        self.model_combo_box.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.model_combo_box.setMinimumContentsLength(36)
         self.model_combo_box.addItems(self.get_local_model_paths())
         self.model_combo_box.addItems(MODELS)
         self.prompt_text_edit = SettingsPlainTextEdit(key='prompt')
