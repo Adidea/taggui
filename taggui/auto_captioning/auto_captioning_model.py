@@ -1,5 +1,7 @@
 import gc
 import re
+import os
+from pathlib import Path
 from contextlib import nullcontext
 from datetime import datetime
 
@@ -15,23 +17,27 @@ import auto_captioning.captioning_thread as captioning_thread
 from utils.enums import CaptionDevice
 from utils.image import Image
 
+def apply_find_and_replace(text: str, replacements_path: Path) -> str:
+    """ 
+    Reads a text file of tag substituions. Ideally used for changing specific tags to be better suited/understood by certain captioning models without altering the source tags.
+    """
+    if not replacements_path.is_file():
+        return text
+    try:
+        with open(replacements_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except OSError:
+        return text
 
-def replace_template_variable(match: re.Match, image: Image) -> str:
-    template_variable = match.group(0)[1:-1].lower()
-    if template_variable == 'tags':
-        return ', '.join(image.tags)
-    if template_variable == 'name':
-        return image.path.stem
-    if template_variable in ('directory', 'folder'):
-        return image.path.parent.name
-
-
-def replace_template_variables(text: str, image: Image) -> str:
-    # Replace template variables inside curly braces that are not escaped.
-    text = re.sub(r'(?<!\\){[^{}]+(?<!\\)}',
-                  lambda match: replace_template_variable(match, image), text)
-    # Unescape escaped curly braces.
-    text = re.sub(r'\\([{}])', r'\1', text)
+    for line in lines:
+        if line.endswith('\n'):
+            line = line[:-1]
+        if ':' not in line:
+            continue
+        find_text, replace_text = line.split(':', 1)
+        if not find_text:
+            continue
+        text = text.replace(find_text, replace_text)
     return text
 
 
@@ -65,12 +71,49 @@ class AutoCaptioningModel:
         self.load_in_4_bit = caption_settings['load_in_4_bit']
         self.bad_words_string = caption_settings['bad_words']
         self.forced_words_string = caption_settings['forced_words']
+        self.tag_source_directory = Path(caption_settings['tag_source'])
         self.remove_tag_separators = caption_settings['remove_tag_separators']
         self.generation_parameters = caption_settings['generation_parameters']
         self.beam_count = self.generation_parameters['num_beams']
         self.processor = None
         self.model = None
         self.tokenizer = None
+
+    def tag_from_dir(self, src_dir: Path,  image: Image):
+        """
+        Reads from matching tag files in specified directory. Useful for rerolling captions that use tag assistance without overwiting the original tags.
+        """
+        tag_file = (src_dir / image.path.name).with_suffix('.txt')
+        subsitution_file = (src_dir / '.tag_substitutions').with_suffix('.txt')
+        if not tag_file.is_file():
+            print(f'tag file not found for: {image.path}')
+            return image.tags
+        with open(tag_file, 'r') as f:
+            tags = f.read()
+            return apply_find_and_replace(tags, subsitution_file)
+
+    def replace_template_variable(self, match: re.Match, image: Image) -> str:
+        template_variable = match.group(0)[1:-1].lower()
+        if template_variable == 'tags':
+            if self.tag_source_directory.is_dir():        
+                image_tags = self.tag_from_dir(self.tag_source_directory, image)
+                if isinstance(image_tags, str):
+                    print(f'Using tags: {image_tags}')
+                    return image_tags        
+                return ', '.join(image.tags)
+        if template_variable == 'name':
+            return image.path.stem
+        if template_variable in ('directory', 'folder'):
+            return image.path.parent.name
+
+
+    def replace_template_variables(self, text: str, image: Image, skip_hash: bool) -> str:
+        # Replace template variables inside curly braces that are not escaped.
+        text = re.sub(r'(?<!\\){[^{}]+(?<!\\)}',
+                    lambda match: self.replace_template_variable(match, image), text)
+        # Unescape escaped curly braces.
+        text = re.sub(r'\\([{}])', r'\1', text)
+        return text
 
     def get_device(self) -> torch.device:
         if (self.device_setting == CaptionDevice.GPU
@@ -197,7 +240,7 @@ class AutoCaptioningModel:
 
     def get_image_prompt(self, image: Image) -> str | None:
         if self.prompt:
-            image_prompt = replace_template_variables(self.prompt, image)
+            image_prompt = self.replace_template_variables(self.prompt, image)
         else:
             self.prompt = self.get_default_prompt()
             image_prompt = self.prompt
