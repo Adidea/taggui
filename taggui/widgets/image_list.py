@@ -5,8 +5,8 @@ from operator import or_
 from pathlib import Path
 
 from PySide6.QtCore import (QFile, QItemSelection, QItemSelectionModel,
-                            QItemSelectionRange, QModelIndex, QSize, QUrl, Qt,
-                            Signal, Slot)
+                            QItemSelectionRange, QModelIndex, QMimeData, QSize, QUrl, Qt,
+                            Signal, Slot, QPersistentModelIndex)
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDockWidget,
                                QFileDialog, QHBoxLayout, QLabel, QLineEdit,
@@ -169,6 +169,39 @@ class ImageListView(QListView):
 
     def contextMenuEvent(self, event):
         self.context_menu.exec_(event.globalPos())
+    
+    def startDrag(self, supportedActions: Qt.DropAction):
+        indices = self.selectedIndexes()
+        if not indices:
+            return
+
+        # Use mimeData from the model.
+        selected_images = self.get_selected_images()
+        image_paths = [QUrl.fromLocalFile(str(image.path)) for image in selected_images]
+        mime_data = QMimeData()
+        mime_data.setUrls(image_paths) 
+        if not mime_data:
+            return
+
+        # The pixmap is just the icon of the first selected item.
+        # This avoids including the text.
+        icon = indices[0].data(Qt.ItemDataRole.DecorationRole)
+        pixmap = icon.pixmap(self.iconSize())
+
+        # Create a new pixmap with transparency for the drag image.
+        drag_pixmap = QPixmap(pixmap.size())
+        drag_pixmap.fill(Qt.GlobalColor.transparent)
+
+        painter = QPainter(drag_pixmap)
+        painter.setOpacity(0.7)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        drag.setPixmap(drag_pixmap)
+        drag.setHotSpot(drag_pixmap.rect().center())
+        drag.exec(supportedActions)
 
     @Slot()
     def invert_selection(self):
