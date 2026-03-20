@@ -13,6 +13,7 @@ from utils.settings import DEFAULT_SETTINGS, get_settings
 from utils.text_edit_item_delegate import TextEditItemDelegate
 from utils.utils import get_confirmation_dialog_reply
 from widgets.image_list import ImageList
+import re
 
 MAX_TOKEN_COUNT = 75
 
@@ -28,8 +29,15 @@ class TagInputBox(QLineEdit):
         self.image_list = image_list
         self.tag_separator = tag_separator
 
+        # styles for normal and duplicate states
+        self.default_style = 'padding: 8px;'
+        # inicates duplicate tag
+        self.duplicate_style = 'padding: 8px; background-color: #ffcccc; color: black;'
+        # indicates partial match (e.g 'shorts' in the tag 'blue shorts')
+        self.partial_style = 'padding: 8px; background-color: #ffffcc; color: black;'
+
         self.setPlaceholderText('Add Tag')
-        self.setStyleSheet('padding: 8px;')
+        self.setStyleSheet(self.default_style)
         settings = get_settings()
         autocomplete_tags = settings.value(
             'autocomplete_tags',
@@ -43,6 +51,28 @@ class TagInputBox(QLineEdit):
                 lambda: QTimer.singleShot(0, self.clear))
         else:
             self.completer = None
+        self.textChanged.connect(self.highlight_duplicates)
+
+    def highlight_duplicates(self, text: str):
+        """
+        Checks if the entered text matches any existing tags and highlights to visually indicate duplicates.
+        """
+        if not text:
+            self.setStyleSheet(self.default_style)
+            return
+
+        existing_tags = set(self.image_tag_list_model.stringList())
+        
+        # Split input by separator to handle multi-tag entry (e.g. "tag1, tag2")
+        input_tags = [t.strip() for t in text.split(self.tag_separator) if t.strip()]
+
+        tag_match = r'\b' + re.escape(text) + r'\b'
+        if any(tag in existing_tags for tag in input_tags):
+            self.setStyleSheet(self.duplicate_style)
+        elif any(re.search(tag_match, tag) for tag in existing_tags):
+            self.setStyleSheet(self.partial_style)
+        else:
+            self.setStyleSheet(self.default_style)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() not in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
