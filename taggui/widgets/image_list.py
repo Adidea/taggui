@@ -111,6 +111,7 @@ class ImageListView(QListView):
         # If the actual height of the image is greater than 3 times the width,
         # the image will be scaled down to fit.
         self.setIconSize(QSize(image_width, image_width * 3))
+        self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
 
         invert_selection_action = self.addAction('Invert Selection')
         invert_selection_action.setShortcut('Ctrl+I')
