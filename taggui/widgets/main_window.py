@@ -458,6 +458,8 @@ class MainWindow(QMainWindow):
             self.reload_directory)
         self.image_list.list_view.tags_paste_requested.connect(
             self.image_list_model.add_tags)
+        self.image_list.list_view.image_deleted_or_moved.connect(
+            self.image_list_model.remove_images)
         # Connecting the signal directly without `isVisible()` causes the menu
         # item to be unchecked when the widget is an inactive tab.
         self.image_list.visibilityChanged.connect(

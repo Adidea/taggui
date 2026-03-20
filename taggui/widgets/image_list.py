@@ -99,6 +99,7 @@ class SelectionMode(str, Enum):
 class ImageListView(QListView):
     tags_paste_requested = Signal(list, list)
     directory_reload_requested = Signal()
+    image_deleted_or_moved = Signal(list)
 
     def __init__(self, parent, proxy_image_list_model: ProxyImageListModel,
                  tag_separator: str, image_width: int):
@@ -292,19 +293,27 @@ class ImageListView(QListView):
         reply = get_confirmation_dialog_reply(title, question)
         if reply != QMessageBox.StandardButton.Yes:
             return
-        for image in selected_images:
+        
+        selected_source_indices = self.get_selected_image_indices()
+        
+        successful_deletions = []
+        for image, source_index in zip(selected_images, selected_source_indices):
             image_file = QFile(image.path)
-            if not image_file.moveToTrash():
-                QMessageBox.critical(self, 'Error',
-                                     f'Failed to delete {image.path}.')
             caption_file_path = image.path.with_suffix('.txt')
             caption_file = QFile(caption_file_path)
+            
+            image_deleted = image_file.moveToTrash()
+            caption_deleted = True 
             if caption_file.exists():
-                if not caption_file.moveToTrash():
-                    QMessageBox.critical(self, 'Error',
-                                         f'Failed to delete '
-                                         f'{caption_file_path}.')
-        self.directory_reload_requested.emit()
+                caption_deleted = caption_file.moveToTrash()
+
+            if image_deleted and caption_deleted:
+                successful_deletions.append(source_index)
+            else:
+                QMessageBox.critical(self, 'Error',
+                                    f'Failed to delete {image.path} and/or its caption file.')
+        if successful_deletions:
+            self.image_deleted_or_moved.emit(successful_deletions)
 
     @Slot()
     def open_image(self):

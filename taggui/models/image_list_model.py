@@ -169,6 +169,23 @@ class ImageListModel(QAbstractListModel):
                                            should_ask_for_confirmation))
         self.redo_stack.clear()
         self.update_undo_and_redo_actions_requested.emit()
+    
+    
+    def remove_images(self, source_indices_to_remove: list[QModelIndex]):
+        """
+        Removes images from the model based on a list of source QModelIndex objects.
+        """
+        sorted_indices = sorted(source_indices_to_remove, 
+                                key=lambda i: i.row(), reverse=True)
+
+        for index in sorted_indices:
+            if not index.isValid():
+                continue
+            row = index.row()
+            self.beginRemoveRows(QModelIndex(), row, row)
+            del self.images[row] 
+            self.endRemoveRows()
+        self.modelReset.emit()
 
     def write_image_tags_to_disk(self, image: Image):
         try:
