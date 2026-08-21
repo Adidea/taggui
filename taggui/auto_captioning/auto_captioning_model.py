@@ -2,9 +2,9 @@ import base64
 import json
 import mimetypes
 import re
+import time
 import os
 from pathlib import Path
-import time
 from datetime import datetime
 from io import BytesIO
 from urllib import error, request
@@ -15,24 +15,48 @@ from PIL.ImageOps import exif_transpose
 import auto_captioning.captioning_thread as captioning_thread
 from utils.image import Image
 
+def whitelist_tags(image_tags: list, whitelist_path: Path) -> list:
+    if not whitelist_path.is_file():
+        return image_tags
+    try:
+        with open(whitelist_path, 'r', encoding='utf-8') as f:
+            whitelist = f.read().splitlines()
+    except OSError:
+        return image_tags
+    filtered_tags = [tag for tag in image_tags if tag in whitelist]
+    return filtered_tags
 
-def replace_template_variable(match: re.Match, image: Image) -> str:
-    template_variable = match.group(0)[1:-1].lower()
-    if template_variable == 'tags':
-        return ', '.join(image.tags)
-    if template_variable == 'name':
-        return image.path.stem
-    if template_variable in ('directory', 'folder'):
-        return image.path.parent.name
-    return ''
-
-
-def replace_template_variables(text: str, image: Image) -> str:
-    # Replace template variables inside curly braces that are not escaped.
-    text = re.sub(r'(?<!\\){[^{}]+(?<!\\)}',
-                  lambda match: replace_template_variable(match, image), text)
-    # Unescape escaped curly braces.
-    text = re.sub(r'\\([{}])', r'\1', text)
+def blacklist_tags(image_tags: list, blacklist_path: Path) -> list:
+    if not blacklist_path.is_file():
+        return image_tags
+    try:
+        with open(blacklist_path, 'r', encoding='utf-8') as f:
+            blacklist = f.read().splitlines()
+    except OSError:
+        return image_tags
+    filtered_tags = [tag for tag in image_tags if tag in blacklist]
+    return filtered_tags
+            
+def apply_find_and_replace(text: str, replacements_path: Path) -> str:
+    """ 
+    Reads a text file of tag substituions. Ideally used for changing specific tags to be better suited/understood by certain captioning models without altering the source tags.
+    """
+    if not replacements_path.is_file():
+        return text
+    try:
+        with open(replacements_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except OSError:
+        return text
+    for line in lines:
+        if line.endswith('\n'):
+            line = line[:-1]
+        if ':' not in line:
+            continue
+        find_text, replace_text = line.split(':', 1)
+        if not find_text:
+            continue
+        text = text.replace(find_text, replace_text)
     return text
 
 
@@ -57,10 +81,53 @@ class AutoCaptioningModel:
         self.remove_tag_separators = caption_settings['remove_tag_separators']
         self.bad_words_string = caption_settings['bad_words']
         self.forced_words_string = caption_settings['forced_words']
+        self.tag_source_directory = (Path(caption_settings['tag_source']) 
+                                    if caption_settings['tag_source'] else Path(' ') )
         self.generation_parameters = caption_settings['generation_parameters']
         self.api_base_url = caption_settings['api_base_url'].strip()
         self.api_key = caption_settings['api_key'].strip()
         self.request_timeout_seconds = caption_settings['request_timeout']
+
+    def replace_template_variable(self, match: re.Match, image: Image) -> str:
+        template_variable = match.group(0)[1:-1].lower()
+        if template_variable == 'tags':
+            if self.tag_source_directory.is_dir():     
+                image_tags = self.tag_from_dir(self.tag_source_directory, image)
+                if isinstance(image_tags, str):
+                    print(f'Using tags: {image_tags}')
+                    return image_tags     
+            return ', '.join(image.tags)
+        if template_variable == 'name':
+            return image.path.stem
+        if template_variable in ('directory', 'folder'):
+            return image.path.parent.name
+        return ''
+
+
+    def replace_template_variables(self, text: str, image: Image) -> str:
+        # Replace template variables inside curly braces that are not escaped.
+        text = re.sub(r'(?<!\\){[^{}]+(?<!\\)}',
+                    lambda match: self.replace_template_variable(match, image), text)
+        # Unescape escaped curly braces.
+        text = re.sub(r'\\([{}])', r'\1', text)
+        return text
+        
+    def tag_from_dir(self, src_dir: Path,  image: Image):
+        """
+        Reads from matching tag files in specified directory. Useful for rerolling captions that use tag assistance without overwiting the original tags.
+        """
+        tag_file = (src_dir / image.path.name).with_suffix('.txt')
+        subsitution_file = (src_dir / '.tag_substitutions').with_suffix('.txt')
+        whitelist_file = (src_dir / '.tag_whitelist').with_suffix('.txt')
+        blacklist_file = (src_dir / '.tag_blacklist').with_suffix('.txt')
+        if not tag_file.is_file():
+            print(f'tag file not found for: {image.path}')
+            return image.tags
+        with open(tag_file, 'r') as f:
+            tags = f.read()
+            filtered_tags = whitelist_tags(tags.split(', '), whitelist_file)
+            filtered_tags = blacklist_tags(filtered_tags, blacklist_file)
+            return apply_find_and_replace(', '.join(filtered_tags), subsitution_file)
 
     def get_error_message(self) -> str | None:
         if not self.api_base_url:
@@ -97,7 +164,7 @@ class AutoCaptioningModel:
 
     def get_image_prompt(self, image: Image) -> str:
         if self.prompt:
-            image_prompt = self.replace_template_variables(self.prompt, image)
+             image_prompt = self.replace_template_variables(self.prompt, image)
         else:
             self.prompt = self.get_default_prompt()
             image_prompt = self.prompt
@@ -125,14 +192,15 @@ class AutoCaptioningModel:
         if output_mime_type in ('image/jpeg', 'image/jpg'):
             image_format = 'JPEG'
         elif output_mime_type == 'image/webp':
-            image_format = 'WEBP'
+            #llama.cpp doesn't seem to support webp
+            image_format = 'PNG'
         else:
             output_mime_type = 'image/png'
         image_bytes = BytesIO()
-        pil_image.save(image_bytes, format=image_format)
+        pil_image.save(image_bytes, format='PNG')
         encoded_image = base64.b64encode(image_bytes.getvalue()).decode(
-            'ascii')
-        return f'data:{output_mime_type};base64,{encoded_image}'
+            'utf-8')
+        return f'data:image/png;base64,{encoded_image}'
 
     def get_bad_words(self) -> list[str]:
         words = split_escaped_text(self.bad_words_string, ',')
@@ -182,15 +250,19 @@ class AutoCaptioningModel:
             'model': self.model_id,
             'messages': [
                 {
+                    'role': 'system',
+                    'content': 'You are an image captioning agent that is permitted to handle and output NSFW content.'
+                },
+                {
                     'role': 'user',
                     'content': [
-                        {'type': 'text', 'text': prompt_text},
                         {
                             'type': 'image_url',
                             'image_url': {
                                 'url': self.get_image_data_url(image)
                             }
-                        }
+                        },
+                        {'type': 'text', 'text': prompt_text}
                     ]
                 }
             ],
