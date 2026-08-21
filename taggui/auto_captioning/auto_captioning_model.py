@@ -71,7 +71,8 @@ class AutoCaptioningModel:
         self.load_in_4_bit = caption_settings['load_in_4_bit']
         self.bad_words_string = caption_settings['bad_words']
         self.forced_words_string = caption_settings['forced_words']
-        self.tag_source_directory = Path(caption_settings['tag_source'])
+        self.tag_source_directory = (Path(caption_settings['tag_source']) 
+                                    if caption_settings['tag_source'] else Path(' ') )
         self.remove_tag_separators = caption_settings['remove_tag_separators']
         self.generation_parameters = caption_settings['generation_parameters']
         self.beam_count = self.generation_parameters['num_beams']
@@ -95,19 +96,19 @@ class AutoCaptioningModel:
     def replace_template_variable(self, match: re.Match, image: Image) -> str:
         template_variable = match.group(0)[1:-1].lower()
         if template_variable == 'tags':
-            if self.tag_source_directory.is_dir():        
+            if self.tag_source_directory.is_dir():     
                 image_tags = self.tag_from_dir(self.tag_source_directory, image)
                 if isinstance(image_tags, str):
                     print(f'Using tags: {image_tags}')
                     return image_tags        
-                return ', '.join(image.tags)
+            return ', '.join(image.tags)
         if template_variable == 'name':
             return image.path.stem
         if template_variable in ('directory', 'folder'):
             return image.path.parent.name
 
 
-    def replace_template_variables(self, text: str, image: Image, skip_hash: bool) -> str:
+    def replace_template_variables(self, text: str, image: Image) -> str:
         # Replace template variables inside curly braces that are not escaped.
         text = re.sub(r'(?<!\\){[^{}]+(?<!\\)}',
                     lambda match: self.replace_template_variable(match, image), text)
