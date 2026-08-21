@@ -2,7 +2,7 @@ import operator
 from fnmatch import fnmatchcase
 
 from PySide6.QtCore import QModelIndex, QSortFilterProxyModel, Qt
-from transformers import PreTrainedTokenizerBase
+from taggui.utils.clip_tokenizer import ClipTokenizer
 
 from models.image_list_model import ImageListModel
 from utils.image import Image
@@ -10,7 +10,7 @@ from utils.image import Image
 
 class ProxyImageListModel(QSortFilterProxyModel):
     def __init__(self, image_list_model: ImageListModel,
-                 tokenizer: PreTrainedTokenizerBase, tag_separator: str):
+                 tokenizer: ClipTokenizer, tag_separator: str):
         super().__init__()
         self.setSourceModel(image_list_model)
         self.tokenizer = tokenizer
@@ -62,7 +62,7 @@ class ProxyImageListModel(QSortFilterProxyModel):
         elif filter_[0] == 'tokens':
             caption = self.tag_separator.join(image.tags)
             # Subtract 2 for the `<|startoftext|>` and `<|endoftext|>` tokens.
-            number_to_compare = len(self.tokenizer(caption).input_ids) - 2
+            number_to_compare = self.tokenizer.count_tokens(caption)
         return comparison_operator(number_to_compare, int(filter_[2]))
 
     def filterAcceptsRow(self, source_row: int,

@@ -2,9 +2,7 @@
 
 datas = [('clip-vit-base-patch32', 'clip-vit-base-patch32'),
          ('images/icon.ico', 'images')]
-hiddenimports = [
-    'timm.models.layers',
-]
+hiddenimports = []
 
 block_cipher = None
 
@@ -18,7 +16,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['torch', 'torchvision', 'torchaudio', 'transformers', 'numpy', 'tqdm', 'regex', 'filelock', 'huggingface_hub', 'safetensors', 'tokenizers', 'packaging', 'yaml'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

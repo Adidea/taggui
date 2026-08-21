@@ -400,13 +400,27 @@ class ImageList(QDockWidget):
         self.list_view = ImageListView(self, proxy_image_list_model,
                                        tag_separator, image_width)
         self.image_index_label = QLabel()
+        
+        # API Connection Status Indicator
+        self.api_status_indicator = QLabel()
+        self.api_status_indicator.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.api_status_indicator.setMinimumWidth(110)
+        
+        # Bottom bar container with image counter left, status right
+        bottom_bar_layout = QHBoxLayout()
+        bottom_bar_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_bar_layout.setSpacing(0)
+        bottom_bar_layout.addWidget(self.image_index_label)
+        bottom_bar_layout.addStretch(1)
+        bottom_bar_layout.addWidget(self.api_status_indicator)
+        
         # A container widget is required to use a layout with a `QDockWidget`.
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.addWidget(self.filter_line_edit)
         layout.addLayout(selection_mode_layout)
         layout.addWidget(self.list_view)
-        layout.addWidget(self.image_index_label)
+        layout.addLayout(bottom_bar_layout)
         self.setWidget(container)
 
         self.selection_mode_combo_box.currentTextChanged.connect(
@@ -430,6 +444,12 @@ class ImageList(QDockWidget):
         if image_count != unfiltered_image_count:
             label_text += f' ({unfiltered_image_count} total)'
         self.image_index_label.setText(label_text)
+    
+    def set_api_status(self, connected: bool):
+        if connected:
+            self.api_status_indicator.setText('🟢 Connected')
+        else:
+            self.api_status_indicator.setText('🔴 Disconnected')
 
     @Slot()
     def go_to_previous_image(self):

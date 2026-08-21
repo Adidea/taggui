@@ -9,7 +9,9 @@ DEFAULT_SETTINGS = {
     'tag_separator': ',',
     'insert_space_after_tag_separator': True,
     'autocomplete_tags': True,
-    'models_directory_path': ''
+    'api_base_url': 'http://127.0.0.1:1234/v1',
+    'api_key': '',
+    'request_timeout': 120
 }
 
 

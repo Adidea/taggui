@@ -1,6 +1,5 @@
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtWidgets import (QDialog, QFileDialog, QGridLayout, QLabel,
-                               QLineEdit, QPushButton, QVBoxLayout)
+from PySide6.QtWidgets import QDialog, QGridLayout, QLabel, QLineEdit, QVBoxLayout
 
 from utils.settings import DEFAULT_SETTINGS, get_settings
 from utils.settings_widgets import (SettingsBigCheckBox, SettingsLineEdit,
@@ -29,7 +28,11 @@ class SettingsDialog(QDialog):
                               Qt.AlignmentFlag.AlignRight)
         grid_layout.addWidget(QLabel('Show tag autocomplete suggestions'),
                               5, 0, Qt.AlignmentFlag.AlignRight)
-        grid_layout.addWidget(QLabel('Auto-captioning models directory'), 6, 0,
+        grid_layout.addWidget(QLabel('Captioning API base URL'), 6, 0,
+                              Qt.AlignmentFlag.AlignRight)
+        grid_layout.addWidget(QLabel('Captioning API key'), 7, 0,
+                              Qt.AlignmentFlag.AlignRight)
+        grid_layout.addWidget(QLabel('Captioning request timeout (s)'), 8, 0,
                               Qt.AlignmentFlag.AlignRight)
 
         font_size_spin_box = SettingsSpinBox(
@@ -64,17 +67,20 @@ class SettingsDialog(QDialog):
             default=DEFAULT_SETTINGS['autocomplete_tags'])
         autocomplete_tags_check_box.stateChanged.connect(
             self.show_restart_warning)
-        self.models_directory_line_edit = SettingsLineEdit(
-            key='models_directory_path',
-            default=DEFAULT_SETTINGS['models_directory_path'])
-        self.models_directory_line_edit.setMinimumWidth(400)
-        self.models_directory_line_edit.setClearButtonEnabled(True)
-        self.models_directory_line_edit.textChanged.connect(
-            self.show_restart_warning)
-        models_directory_button = QPushButton('Select Directory...')
-        models_directory_button.setFixedWidth(
-            int(models_directory_button.sizeHint().width() * 1.3))
-        models_directory_button.clicked.connect(self.set_models_directory_path)
+        api_base_url_line_edit = SettingsLineEdit(
+            key='api_base_url', default=DEFAULT_SETTINGS['api_base_url'])
+        api_base_url_line_edit.setMinimumWidth(400)
+        api_base_url_line_edit.setPlaceholderText('http://127.0.0.1:1234/v1')
+        api_base_url_line_edit.setClearButtonEnabled(True)
+        api_key_line_edit = SettingsLineEdit(
+            key='api_key', default=DEFAULT_SETTINGS['api_key'])
+        api_key_line_edit.setMinimumWidth(400)
+        api_key_line_edit.setClearButtonEnabled(True)
+        api_key_line_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        request_timeout_spin_box = SettingsSpinBox(
+            key='request_timeout',
+            default=DEFAULT_SETTINGS['request_timeout'],
+            minimum=1, maximum=3600)
         file_types_line_edit = SettingsLineEdit(
             key='image_list_file_formats',
             default=DEFAULT_SETTINGS['image_list_file_formats'])
@@ -93,9 +99,11 @@ class SettingsDialog(QDialog):
                               4, 1, Qt.AlignmentFlag.AlignLeft)
         grid_layout.addWidget(autocomplete_tags_check_box, 5, 1,
                               Qt.AlignmentFlag.AlignLeft)
-        grid_layout.addWidget(self.models_directory_line_edit, 6, 1,
+        grid_layout.addWidget(api_base_url_line_edit, 6, 1,
                               Qt.AlignmentFlag.AlignLeft)
-        grid_layout.addWidget(models_directory_button, 7, 1,
+        grid_layout.addWidget(api_key_line_edit, 7, 1,
+                              Qt.AlignmentFlag.AlignLeft)
+        grid_layout.addWidget(request_timeout_spin_box, 8, 1,
                               Qt.AlignmentFlag.AlignLeft)
         layout.addLayout(grid_layout)
 
@@ -136,20 +144,3 @@ class SettingsDialog(QDialog):
         self.settings.setValue('tag_separator', tag_separator)
         self.show_restart_warning()
 
-    @Slot()
-    def set_models_directory_path(self):
-        models_directory_path = self.settings.value(
-            'models_directory_path',
-            defaultValue=DEFAULT_SETTINGS['models_directory_path'], type=str)
-        if models_directory_path:
-            initial_directory_path = models_directory_path
-        elif self.settings.contains('directory_path'):
-            initial_directory_path = self.settings.value('directory_path')
-        else:
-            initial_directory_path = ''
-        models_directory_path = QFileDialog.getExistingDirectory(
-            parent=self, caption='Select directory containing auto-captioning '
-                                 'models',
-            dir=initial_directory_path)
-        if models_directory_path:
-            self.models_directory_line_edit.setText(models_directory_path)

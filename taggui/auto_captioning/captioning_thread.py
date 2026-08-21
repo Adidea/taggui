@@ -1,12 +1,10 @@
 from datetime import datetime
-from pathlib import Path
 from time import perf_counter
 
 from PIL import UnidentifiedImageError
 from PySide6.QtCore import QModelIndex, QThread, Qt, Signal
 
 from auto_captioning.auto_captioning_model import AutoCaptioningModel
-from auto_captioning.models_list import get_model_class
 from models.image_list_model import ImageListModel
 from utils.enums import CaptionPosition
 from utils.image import Image
@@ -63,30 +61,24 @@ class CaptioningThread(QThread):
 
     def __init__(self, parent, image_list_model: ImageListModel,
                  selected_image_indices: list[QModelIndex],
-                 caption_settings: dict, tag_separator: str,
-                 models_directory_path: Path | None):
+                 caption_settings: dict, tag_separator: str):
         super().__init__(parent)
         self.image_list_model = image_list_model
         self.selected_image_indices = selected_image_indices
         self.caption_settings = caption_settings
         self.tag_separator = tag_separator
-        self.models_directory_path = models_directory_path
         self.is_error = False
         self.is_canceled = False
 
     def run_captioning(self):
-        model_id = self.caption_settings['model_id']
-        model_class = get_model_class(model_id)
-        model: AutoCaptioningModel = model_class(
-            captioning_thread_=self, caption_settings=self.caption_settings)
+        model = AutoCaptioningModel(captioning_thread_=self,
+                                    caption_settings=self.caption_settings)
         error_message = model.get_error_message()
         if error_message:
             self.is_error = True
             self.clear_console_text_edit_requested.emit()
             print(error_message)
             return
-        model.load_processor_and_model()
-        model.monkey_patch_after_loading()
         if self.is_canceled:
             print('Canceled captioning.')
             return
@@ -107,13 +99,12 @@ class CaptioningThread(QThread):
                                                       Qt.ItemDataRole.UserRole)
             image_prompt = model.get_image_prompt(image)
             try:
-                model_inputs = model.get_model_inputs(image_prompt, image)
+                caption, console_output_caption = model.generate_caption(
+                    image=image, image_prompt=image_prompt)
             except UnidentifiedImageError:
                 print(f'Skipping {image.path.name} because its file format is '
                       'not supported or it is a corrupted image.')
                 continue
-            caption, console_output_caption = model.generate_caption(
-                model_inputs, image_prompt)
             tags = add_caption_to_tags(image.tags, caption, caption_position)
             self.caption_generated.emit(image_index, caption, tags)
             if are_multiple_images_selected:
